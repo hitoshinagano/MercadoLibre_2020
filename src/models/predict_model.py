@@ -49,10 +49,6 @@ def predict_implicit_model(model, sparse_user_item,
         pred.index.name = 'seq'
         pred = pred.reset_index()
 
-        # true_fn = 'true.pkl'
-        # true_fp = os.path.join(processed_data_dir, true_fn)
-        # true_df = pd.read_pickle(true_fp)
-
         pred = pd.merge(pred, true_df, how = 'left')
 
         pred = pd.merge(pred, item_domain, how = 'left',
@@ -89,3 +85,44 @@ def predict_implicit_model(model, sparse_user_item,
 
     else:
         return pred
+
+
+def score_pred(pred, true_df, item_domain, N = None):
+
+    if not N: N = pred.shape[1]
+
+    pred.rename(columns = {c: str(c) for c in range(N)}, inplace = True)
+
+    pred.index.name = 'seq'
+    pred = pred.reset_index()
+
+    pred = pd.merge(pred, true_df, how = 'left')
+
+    pred = pd.merge(pred, item_domain, how = 'left',
+                    left_on = 'item_bought', right_on = 'item_id')
+    pred.rename(columns = {'domain_id': 'item_bought_domain'}, inplace = True)
+    pred.drop('item_id', axis = 1, inplace = True)
+
+    for c in range(N):
+        pred = pd.merge(pred, item_domain, how = 'left',
+                        left_on = str(c), right_on = 'item_id')
+        pred.rename(columns = {'domain_id': 'domain_id_' + str(c)}, inplace = True)
+        pred.drop('item_id', axis = 1, inplace = True)
+
+    for c in range(N):
+        pred['rel_item_' + str(c)]   = (pred[str(c)] == pred.item_bought) * 12
+        pred['rel_domain_' + str(c)] = (pred['domain_id_' + str(c)] ==
+                                        pred.item_bought_domain).astype(int)
+
+    pred['relevances_item'] = pred.filter(like = 'rel_item').apply(list, axis = 1)
+    pred['relevances_domain'] = pred.filter(like = 'rel_domain').apply(list, axis = 1)
+
+    sum_relevances = lambda x: np.array(x.relevances_item) + np.array(x.relevances_domain)
+    pred['relevances'] = pred[['relevances_item', 'relevances_domain']].apply(sum_relevances,
+                                                                              axis = 1)
+
+    N_to_1 = [list(range(N, 0, -1))]
+
+    pred['ndcg'] = pred.relevances.apply(lambda x: ndcg_score([x], N_to_1))
+
+    return pred

@@ -38,7 +38,7 @@ def shrink_and_split(train, keep_train = None, validation = None):
                                          replace = False)
         test = train[train.seq.isin(selected_seqs)].copy()
         test.drop('item_bought', axis = 1, inplace = True)
-        test = test[test.event_type.notnull()] # change to 'buy' if this comes from dataprep
+        test = test[test.event_type != 'buy'] # change to 'buy' if this comes from dataprep
         train = train[~train.seq.isin(selected_seqs)].copy()
 
     print('train/test shapes:', train.shape, test.shape)
@@ -46,7 +46,10 @@ def shrink_and_split(train, keep_train = None, validation = None):
     return train, test
 
 
-def join_prepare_train_test(df_train, df_test, buy_weight = None, **kwargs):
+def join_prepare_train_test(df_train, df_test,
+                            buy_weight = None, return_search = False,
+                            drop_timezone = True,
+                            **kwargs):
     # print('join_prepare_train_test:,', buy_weight, kwargs)
 
     test_offset = df_train.seq.max() + 1
@@ -67,6 +70,10 @@ def join_prepare_train_test(df_train, df_test, buy_weight = None, **kwargs):
         df_buy['views'] = buy_weight
         df_buy['event_type'] = 'buy'
 
+    if return_search:
+        df_search = df[search_idx].copy()
+        df_search.drop(['event_timestamp', 'time_diff', 'item_bought'], axis = 1, inplace = True)
+
     df = df[~(buy_idx | search_idx)].copy() # only views
     df = df.drop(['event_timestamp', 'item_bought', 'time_diff'], axis = 1)
     df = df.groupby(['seq', 'event_info']).event_type.count().reset_index()
@@ -75,7 +82,15 @@ def join_prepare_train_test(df_train, df_test, buy_weight = None, **kwargs):
 
     if buy_weight:
         df = pd.concat([df, df_buy]).sort_values('seq')
-        df['event_info'] = df['event_info'].astype(int)
+        #df['event_info'] = df['event_info'].astype(int)
+
+    if return_search:
+        df = pd.concat([df, df_search])
+
+    if drop_timezone and ('timezone' in df):
+        df = df.drop(columns = ['timezone'])
+
+    df = df.sort_values(['seq', 'event_type'], ascending = [True, False])
 
     # df['normalized_views'] = df.groupby('seq').views.transform(lambda x: x/sum(x))
 
