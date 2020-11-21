@@ -1,14 +1,109 @@
 from dotenv import load_dotenv, find_dotenv
 from pathlib import Path
+import os
 import pandas as pd
 import numpy as np
-import os
+from tqdm import tqdm
+
+
+project_dir = Path(__file__).resolve().parents[2]
+processed_data_dir = os.path.join(project_dir, os.environ.get("PROCESSED_DATA_DIR"))
+raw_data_dir = os.path.join(project_dir, os.environ.get("RAW_DATA_DIR"))
+
+def proc_dataset(df):
+    number_of_batches = len(df) // 50
+    proc_df = list()
+    for df_p in tqdm(np.array_split(df, number_of_batches)):
+        if 'item_bought' in df_p:
+            df_p = pd.concat([df_p.user_history.apply(pd.Series), df_p.item_bought], axis = 1).stack()
+            train_dataset = True
+        else:
+            df_p = df_p.user_history.apply(pd.Series).stack()
+            train_dataset = False
+
+        df_p = df_p.apply(pd.Series)
+        df_p.reset_index(inplace = True)
+        df_p.drop(columns = 'level_1', inplace = True)
+
+        if train_dataset:
+            new_columns = {0: 'item_bought', 'level_0': 'seq'}
+            df_p['event_type'] = df_p.event_type.fillna('buy')
+        else:
+            new_columns = {'level_0': 'seq'}
+
+        df_p.rename(columns = new_columns, inplace = True)
+
+        # df_p['timezone'] = df_p.event_timestamp.str[-4:]
+        df_p['event_timestamp'] = pd.to_datetime(df_p.event_timestamp.str[:-9])
+        df_p['time_diff'] = df_p.groupby('seq').event_timestamp.diff().dt.seconds
+
+        # if train_dataset:
+        proc_df.append(df_p)
+
+    proc_df = pd.concat(proc_df)
+    return proc_df
+
+def get_lang_from_views(df):
+
+    # read item_domain.pkl
+    item_domain_fn = 'item_domain.pkl'
+    item_domain_fp = os.path.join(processed_data_dir, item_domain_fn)
+    if not os.path.exists(item_domain_fp):
+        print('run EDA_dataprep.ipynb first to create item_domain.pkl')
+        assert False
+    item_domain = pd.read_pickle(item_domain_fp)
+    item_domain['lang_domain'] = item_domain.domain_id.str[:3].replace({'MLM': 'es', 'MLB': 'pt'})
+
+    # get language from most prevalent viewed item domains
+    lang = df[df.event_type == 'view'].copy()
+    lang['event_info'] = lang.event_info.astype(int)
+    lang = lang[['seq', 'event_info']]
+    lang = pd.merge(lang, item_domain[['item_id', 'lang_domain']], how = 'left',
+                     left_on = 'event_info', right_on = 'item_id')
+    lang = lang.groupby('seq').lang_domain.value_counts()
+    lang = lang.unstack().fillna(0).idxmax(axis = 1)
+    lang = lang.reset_index().rename(columns = {0: 'lang_seq'})
+
+    # merge back into df by seq_id
+    df = pd.merge(df, lang, how = 'left')
+
+    return df
+
+def save_true_labels(df, true_fn = 'true.pkl'):
+    true_fp = os.path.join(processed_data_dir, true_fn)
+    true_df = df[(df.event_type.isnull()) | (df.event_type == 'buy')]
+    true_df = true_df[['seq', 'item_bought']]
+    true_df.to_pickle(true_fp)
+
+def read_raw_save_processed(raw_fn = 'train_dataset.jl.gz', processed_fn = 'train_dataset.pkl',
+              force_process = False, nrows = None, add_lang = True):
+
+    processed_fp = os.path.join(processed_data_dir, processed_fn)
+    if os.path.exists(processed_fp) and not force_process:
+        processed = pd.read_pickle(processed_fp)
+    else:
+        raw = pd.read_json(os.path.join(raw_data_dir, raw_fn), lines = True, nrows = nrows)
+        raw['len_events'] = raw.user_history.str.len()
+        raw.sort_values('len_events', inplace = True)
+        raw.drop('len_events', axis = 1, inplace = True)
+        processed = proc_dataset(raw)
+        if add_lang:
+            processed = get_lang_from_views(processed)
+        processed.to_pickle(os.path.join(processed_data_dir, processed_fn))
+
+    if 'item_bought' in processed:
+        processed.item_bought = processed.item_bought.fillna(method = 'backfill').astype(int)
+        processed['in_nav'] = processed.item_bought == processed.event_info
+
+    return processed
+
+
 
 
 def read_processed(train_fn, test_fn):
 
-    project_dir = Path(__file__).resolve().parents[2]
-    processed_data_dir = os.path.join(project_dir, os.environ.get("PROCESSED_DATA_DIR"))
+    # project_dir = Path(__file__).resolve().parents[2]
+    # processed_data_dir = os.path.join(project_dir, os.environ.get("PROCESSED_DATA_DIR"))
 
     # train_fn = 'train_dataset.pkl'
     train_fp = os.path.join(processed_data_dir, train_fn)
@@ -48,8 +143,7 @@ def shrink_and_split(train, keep_train = None, validation = None):
 
 def join_prepare_train_test(df_train, df_test,
                             buy_weight = None, return_search = False,
-                            drop_timezone = True,
-                            **kwargs):
+                            drop_timezone = True, just_concat = False):
     # print('join_prepare_train_test:,', buy_weight, kwargs)
 
     test_offset = df_train.seq.max() + 1
@@ -58,6 +152,11 @@ def join_prepare_train_test(df_train, df_test,
     test_shifted_seq_vals = np.sort(np.unique(df_test_copy.seq))
     df = pd.concat([df_train, df_test_copy])
     df['event_type'] = df.event_type.fillna('buy') # not needed if 'buy' is filled in dataprep
+
+    if just_concat:
+        if drop_timezone and ('timezone' in df):
+            df = df.drop(columns = ['timezone'])
+        return test_offset, test_shifted_seq_vals, df
 
     buy_idx = df.event_type == 'buy'
     search_idx = df.event_type == 'search'
