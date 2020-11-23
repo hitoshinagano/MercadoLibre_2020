@@ -89,7 +89,7 @@ def read_raw_save_processed(raw_fn = 'train_dataset.jl.gz', processed_fn = 'trai
         processed = proc_dataset(raw)
         if add_lang:
             processed = get_lang_from_views(processed)
-        processed.to_pickle(os.path.join(processed_data_dir, processed_fn))
+        processed.to_pickle(processed_fp)
 
     if 'item_bought' in processed:
         processed.item_bought = processed.item_bought.fillna(method = 'backfill').astype(int)
@@ -97,27 +97,39 @@ def read_raw_save_processed(raw_fn = 'train_dataset.jl.gz', processed_fn = 'trai
 
     return processed
 
+def read_processed(train_fn, test_fn, keep_train = None, validation = None,
+                   lang = 'both'):
 
-
-
-def read_processed(train_fn, test_fn):
-
-    # project_dir = Path(__file__).resolve().parents[2]
-    # processed_data_dir = os.path.join(project_dir, os.environ.get("PROCESSED_DATA_DIR"))
-
-    # train_fn = 'train_dataset.pkl'
     train_fp = os.path.join(processed_data_dir, train_fn)
     train = pd.read_pickle(train_fp)
 
-    # test_fn = 'test_dataset.pkl'
-    test_fp = os.path.join(processed_data_dir, test_fn)
-    test = pd.read_pickle(test_fp)
+    if validation is None:
+        test_fp = os.path.join(processed_data_dir, test_fn)
+        test = pd.read_pickle(test_fp)
+    else:
+        train, test = shrink_and_split(train,
+                                       keep_train = keep_train,
+                                       validation = validation)
+
+    for df in [train, test]:
+        if 'timezone' in df:
+            df.drop(columns = 'timezone', inplace = True)
+
+        if lang == 'es':
+            df['lang_seq'] = df.lang_seq.fillna('pt') # if lang not detected make it 'pt'
+        else:
+            df['lang_seq'] = df.lang_seq.fillna('pt')
+
+    if lang != 'both':
+        print('lang', lang)
+        train = train[train.lang_seq == lang]
+        test = test[test.lang_seq == lang]
 
     return train, test
 
 def shrink_and_split(train, keep_train = None, validation = None):
 
-    print('train shape:', train.shape)
+    print('initial train shape:', train.shape)
 
     if keep_train:
         unique_seqs = train.seq.unique()
@@ -141,9 +153,25 @@ def shrink_and_split(train, keep_train = None, validation = None):
     return train, test
 
 
+# one_hour = np.timedelta64(1, 'h')
+# def get_event_weights_h(x):
+#     last_ts = x.values[-1]
+#     h = (last_ts - x) / one_hour
+#     return (1 - alpha) **  h
+
+alpha = 0.02 # 0.1 => 5d : 0.6
+one_minus_alpha = 1 - alpha
+one_day = np.timedelta64(1, 'D')
+
+def get_event_weights_d(x):
+    last_ts = x.values[-1]
+    d = (last_ts - x) / one_day
+    return one_minus_alpha ** d.round(0)
+
 def join_prepare_train_test(df_train, df_test,
                             buy_weight = None, return_search = False,
-                            drop_timezone = True, just_concat = False):
+                            drop_timezone = True, just_concat = False,
+                            extra_weight = 200, **kwargs):
     # print('join_prepare_train_test:,', buy_weight, kwargs)
 
     test_offset = df_train.seq.max() + 1
@@ -166,7 +194,7 @@ def join_prepare_train_test(df_train, df_test,
         df_buy.drop('event_info', axis = 1, inplace = True)
         df_buy.rename(columns = {'item_bought': 'event_info'}, inplace = True)
         df_buy = df_buy.drop(['event_timestamp', 'event_type', 'time_diff'], axis = 1)
-        df_buy['views'] = buy_weight
+        df_buy['views'] = buy_weight + extra_weight * df_buy['in_nav_pred']
         df_buy['event_type'] = 'buy'
 
     if return_search:
@@ -174,9 +202,12 @@ def join_prepare_train_test(df_train, df_test,
         df_search.drop(['event_timestamp', 'time_diff', 'item_bought'], axis = 1, inplace = True)
 
     df = df[~(buy_idx | search_idx)].copy() # only views
+    df['event_weights'] = df.groupby('seq').event_timestamp.transform(get_event_weights_d)
     df = df.drop(['event_timestamp', 'item_bought', 'time_diff'], axis = 1)
-    df = df.groupby(['seq', 'event_info']).event_type.count().reset_index()
-    df.rename(columns = {'event_type': 'views'}, inplace = True) # fixing col name
+    # df = df.groupby(['seq', 'event_info']).event_type.count().reset_index() # simple count
+    # df.rename(columns = {'event_type': 'views'}, inplace = True) # fixing col name - simple count
+    df = df.groupby(['seq', 'event_info']).event_weights.sum().reset_index()
+    df.rename(columns = {'event_weights': 'views'}, inplace = True) # fixing col name
     df['event_type'] = 'view'
 
     if buy_weight:
@@ -190,6 +221,8 @@ def join_prepare_train_test(df_train, df_test,
         df = df.drop(columns = ['timezone'])
 
     df = df.sort_values(['seq', 'event_type'], ascending = [True, False])
+
+    df.drop(['lang_seq', 'in_nav', 'in_nav_pred'], axis = 1, inplace = True)
 
     # df['normalized_views'] = df.groupby('seq').views.transform(lambda x: x/sum(x))
 
