@@ -194,7 +194,7 @@ def join_prepare_train_test(df_train, df_test,
         df_buy.drop('event_info', axis = 1, inplace = True)
         df_buy.rename(columns = {'item_bought': 'event_info'}, inplace = True)
         df_buy = df_buy.drop(['event_timestamp', 'event_type', 'time_diff'], axis = 1)
-        df_buy['views'] = buy_weight + extra_weight * df_buy['in_nav_pred']
+        df_buy['views'] = buy_weight #+ extra_weight * df_buy['in_nav_pred']
         df_buy['event_type'] = 'buy'
 
     if return_search:
@@ -202,12 +202,12 @@ def join_prepare_train_test(df_train, df_test,
         df_search.drop(['event_timestamp', 'time_diff', 'item_bought'], axis = 1, inplace = True)
 
     df = df[~(buy_idx | search_idx)].copy() # only views
-    df['event_weights'] = df.groupby('seq').event_timestamp.transform(get_event_weights_d)
+    # df['event_weights'] = df.groupby('seq').event_timestamp.transform(get_event_weights_d)
     df = df.drop(['event_timestamp', 'item_bought', 'time_diff'], axis = 1)
-    # df = df.groupby(['seq', 'event_info']).event_type.count().reset_index() # simple count
-    # df.rename(columns = {'event_type': 'views'}, inplace = True) # fixing col name - simple count
-    df = df.groupby(['seq', 'event_info']).event_weights.sum().reset_index()
-    df.rename(columns = {'event_weights': 'views'}, inplace = True) # fixing col name
+    df = df.groupby(['seq', 'event_info']).event_type.count().reset_index() # simple count
+    df.rename(columns = {'event_type': 'views'}, inplace = True) # fixing col name - simple count
+    # df = df.groupby(['seq', 'event_info']).event_weights.sum().reset_index()
+    # df.rename(columns = {'event_weights': 'views'}, inplace = True) # fixing col name
     df['event_type'] = 'view'
 
     if buy_weight:
@@ -222,7 +222,8 @@ def join_prepare_train_test(df_train, df_test,
 
     df = df.sort_values(['seq', 'event_type'], ascending = [True, False])
 
-    df.drop(['lang_seq', 'in_nav', 'in_nav_pred'], axis = 1, inplace = True)
+    # df.drop(['lang_seq', 'in_nav', 'in_nav_pred'], axis = 1, inplace = True)
+    df.drop(['lang_seq'], axis = 1, inplace = True)
 
     # df['normalized_views'] = df.groupby('seq').views.transform(lambda x: x/sum(x))
 

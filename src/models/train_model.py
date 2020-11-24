@@ -33,7 +33,8 @@ def fit_implicit_model(df,
                                          (df['seq_id'], df['event_info_id'])))
 
     # Initialize the als model and fit it using the sparse item-user matrix
-    model = implicit.als.AlternatingLeastSquares(factors = factors,
+    model = implicit.als.AlternatingLeastSquares(use_gpu = False,
+                                                 factors = factors,
                                                  regularization = regularization,
                                                  iterations = iterations)
 
