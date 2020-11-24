@@ -171,8 +171,11 @@ def get_event_weights_d(x):
 def join_prepare_train_test(df_train, df_test,
                             buy_weight = None, return_search = False,
                             drop_timezone = True, just_concat = False,
-                            extra_weight = 200, **kwargs):
+                            extra_weight = 200, lang = 'pt', **kwargs):
     # print('join_prepare_train_test:,', buy_weight, kwargs)
+    # breakpoint()
+    if isinstance(df_train, str) and isinstance(df_test, str):
+        df_train, df_test = read_processed(df_train, df_test, lang = lang)
 
     test_offset = df_train.seq.max() + 1
     df_test_copy = df_test.copy()
