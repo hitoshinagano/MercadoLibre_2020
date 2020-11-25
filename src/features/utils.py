@@ -52,7 +52,7 @@ def get_lang_from_views(df):
         print('run EDA_dataprep.ipynb first to create item_domain.pkl')
         assert False
     item_domain = pd.read_pickle(item_domain_fp)
-    item_domain['lang_domain'] = item_domain.domain_id.str[:3].replace({'MLM': 'es', 'MLB': 'pt'})
+    item_domain['lang_domain'] = item_domain.category_id.str[:3].replace({'MLM': 'es', 'MLB': 'pt'})
 
     # get language from most prevalent viewed item domains
     lang = df[df.event_type == 'view'].copy()
@@ -68,6 +68,10 @@ def get_lang_from_views(df):
     df = pd.merge(df, lang, how = 'left')
 
     return df
+
+def get_lang_from_nlp(df):
+    """use langdetect on search strings to detect lang"""
+    pass
 
 def save_true_labels(df, true_fn = 'true.pkl'):
     true_fp = os.path.join(processed_data_dir, true_fn)
@@ -89,6 +93,7 @@ def read_raw_save_processed(raw_fn = 'train_dataset.jl.gz', processed_fn = 'trai
         processed = proc_dataset(raw)
         if add_lang:
             processed = get_lang_from_views(processed)
+            # call get_lang_from_nlp to detect rows with lang_seq = NaNs
         processed.to_pickle(processed_fp)
 
     if 'item_bought' in processed:
