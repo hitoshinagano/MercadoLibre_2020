@@ -6,7 +6,7 @@ from sklearn.metrics import ndcg_score
 def predict_implicit_model(model, sparse_user_item,
                            seq_map, event_info_map,
                            test_shifted_seq_vals,
-                           N, test_offset,
+                           N, test_offset, recalculate_user,
                            validation = True, true_df = None, item_domain = None):
 
     """
@@ -22,7 +22,7 @@ def predict_implicit_model(model, sparse_user_item,
     recs = seq_map[seq_map.seq.isin(test_shifted_seq_vals)].copy()
 
     # whole test takes about 3 hours: 100%|██████████| 165700/165700 [3:08:36<00:00, 14.64it/s]
-    recommender = lambda x: model.recommend(x, sparse_user_item, N = N, 
+    recommender = lambda x: model.recommend(x, sparse_user_item, N = N,
                                             recalculate_user = recalculate_user,
                                             filter_already_liked_items = False)
     recs['implicit_preds'] = recs.seq_id.progress_apply(recommender)
