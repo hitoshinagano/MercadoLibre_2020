@@ -125,8 +125,9 @@ def read_processed(train_fn, test_fn, keep_train = None, validation = None,
         else:
             df['lang_seq'] = df.lang_seq.fillna('pt')
 
+    print('lang', lang)
+
     if lang != 'both':
-        print('lang', lang)
         train = train[train.lang_seq == lang]
         test = test[test.lang_seq == lang]
 
@@ -175,7 +176,8 @@ def get_event_weights_d(x):
 
 def join_prepare_train_test(df_train, df_test,
                             buy_weight = None, return_search = False,
-                            drop_timezone = True, just_concat = False,
+                            drop_timezone = True, drop_lang = True,
+                            just_concat = False,
                             extra_weight = 200, lang = 'pt', **kwargs):
     # print('join_prepare_train_test:,', buy_weight, kwargs)
     # breakpoint()
@@ -231,7 +233,8 @@ def join_prepare_train_test(df_train, df_test,
     df = df.sort_values(['seq', 'event_type'], ascending = [True, False])
 
     # df.drop(['lang_seq', 'in_nav', 'in_nav_pred'], axis = 1, inplace = True)
-    df.drop(['lang_seq'], axis = 1, inplace = True)
+    if drop_lang and ('lang_seq' in df):
+        df.drop(['lang_seq'], axis = 1, inplace = True)
 
     # df['normalized_views'] = df.groupby('seq').views.transform(lambda x: x/sum(x))
 
