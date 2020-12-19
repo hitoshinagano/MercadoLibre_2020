@@ -1,7 +1,7 @@
 MercadoLibre_competicao
 ==============================
 
-Code for Mercado Libre Data Challenge 2020.
+Code for Mercado Libre [Data Challenge 2020](https://ml-challenge.mercadolibre.com/)
 
 
 # solution
