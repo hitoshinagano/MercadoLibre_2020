@@ -12,6 +12,8 @@ The solution is based on two approaches:
 
 I have used the term `seq` (sequence) to denote user, throughout the code and here.
 
+Main packages: implicit (matrix factorization) and gensim. 
+
 # notebooks
 
     ├── notebooks
