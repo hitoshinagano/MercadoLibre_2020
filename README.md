@@ -15,24 +15,29 @@ I have used the term `seq` (sequence) to denote user, throughout the code and he
 # notebooks
 
     ├── notebooks
-    │   ├── pred_base                     <- baseline submissions that will get you around ndcg=0.22... in public leaderboard.
+    │   ├── pred_base                     <- baseline submissions that will get you around ndcg=0.22... 
+    │   │                                    in public leaderboard.
     │   ├── EDA_dataprep                  <- summarizes some finds in EDA and prepares data for modeling.
     │   ├── dataprep_customembedding      <- word vectors using gensim.
-    │   ├── implicit                      <- grid search for validation with implicit. It also contains a prediction script to produce submissions.
-    │   ├── SEARCH_dataprep               <- embeddings for the search texts, from custom word vectors or from pre-trained word vectors.
-    │   └── SEARCH_validation_prediction  <- recommendations based on similarity of search texts (queries) and the description of the item.
+    │   ├── implicit                      <- grid search for validation with implicit. It also contains 
+    │   │                                    a prediction script to produce submissions.
+    │   ├── SEARCH_dataprep               <- embeddings for the search texts, from custom word vectors 
+    │   │                                    or from pre-trained word vectors.
+    │   └── SEARCH_validation_prediction  <- recommendations based on similarity of search texts 
+                                             (queries) and the description of the item.
     
 # src
 
     ├── src
     │   │
     │   ├── features       
-    │   │   └── utils.py   <- various functions to read, write, sample and also to clean, transform dataset
+    │   │   └── utils.py          <- various functions to read, write, 
+    │   │                            sample and also to clean, transform dataset
     │   │
     │   ├── models         
     │   │   │          
     │   │   ├── predict_model.py  <- predict with implicit model
-    │   │   └── train_model.py    <- fit implicit model
+            └── train_model.py    <- fit implicit model
     
 
 # results
